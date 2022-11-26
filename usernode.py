@@ -4,13 +4,11 @@ Created on Fri Sep 27 22:28:39 2019
 """
 import numpy as np
 import matplotlib.pyplot as plt
-from scipy import signal
 from matplotlib.lines import Line2D
 import networkx as nx
 #import random
 from random import random, sample, choice
 import os
-#import winsound
 from time import gmtime, strftime
 from shutil import copyfile
 import csv
@@ -30,24 +28,13 @@ STEP = 0.01
 GRAPH = 'regular' # regular, complete or cycle
 NU = 50
 NUM_NODES = 50
-USERNUMBER=100
+NUM_USERS=100
 NUM_NEIGHBOURS = 4
 START_TIMES = 10*np.ones(NUM_NODES)
 NODETX_SIZE= [int(10*(NUM_NODES+1)/((NodeID+1)**0.9)) for NodeID in range(NUM_NODES)]
-PROBABILITY= False #DBNS
-RANDOM= True    #URNS
-REPRANDOM= False #RBNS
-MIMUDELAY= False
-QOS = False  #DBNS+
+NODE_SELECTION = 'URNS' # URNS, RBNS, DBNS or DBNS+
 FILTER= True
-AVERAGE= False
-LimitedSize= False
 RE_PEERING= False
-
-
-# for NodeID in range(NUM_NODES):
-#     if NODETX_SIZE[NodeID]>=120:
-#         NODETX_SIZE[NodeID]=120
 
 REPDIST = 'zipf'
 if REPDIST=='zipf':
@@ -58,17 +45,10 @@ elif REPDIST=='uniform':
     REP = np.ones(NUM_NODES, dtype=int)
 # Modes: 0 = inactive, 1 = content, 2 = best-effort, 3 = malicious
 #MODE = [2-NodeID%3 for NodeID in range(NUM_NODES)] # honest env
-MODE = [2, 2, 2, 2, 2, 2, 2, 2, 2 ,2]*5
-#MODE = [1, 1, 1, 1, 1, 1, 1, 1, 1 ,1]*5
+MODE = [2 for _ in range(NUM_NODES)]
+#MODE = [1 for _ in range(NUM_NODES)]
 #MODE = [3-(NodeID+1)%4 for NodeID in range(NUM_NODES)] # malicoius env
 #MODE[2]=4
-#AVG_WORK = [2*rep/max(REP) for rep in REP
-#AVG_WORK = np.ones(NUM_NODES)
-#IOT = np.concatenate((np.zeros(int(NUM_NODES/2)), np.ones(int(NUM_NODES/2))))
-#IOT = [NodeID%2 for NodeID in range(NUM_NODES)]
-IOT = np.zeros(NUM_NODES)
-IOTLOW = 0.5
-IOTHIGH = 1
 MAX_WORK = 10
 MODE_COLOUR_MAP = ['grey', 'tab:blue', 'tab:red', 'tab:green', 'tab:green']
 
@@ -89,19 +69,8 @@ SCHEDULING = 'drr_lds'
 
     
 def main():
-
-    #plt.close('all')
     dirstr = simulate()
-    #dirstr = 'data/2022-02-12_112013'
     plot_results(dirstr)
-    #plot_results('data/2021-09-20_095913') # honest environment
-    #plot_results('data/2020-07-26_122609') # malicious environment
-    #plot_results('data/2020-07-25_154015') # IoT
-    #plot_scheduler_comp('Data/2020-07-23_233549', 'Data/2020-07-23_213333')
-    #plot_ratesetter_comp('data/2020-07-24_132945', 'data/2020-07-23_213333', 'data/2020-07-24_153139') # changing beta
-    #plot_ratesetter_comp('data/2020-07-23_212831', 'data/2020-07-23_213333', 'data/2020-07-24_124532') # changing W
-    #plot_ratesetter_comp('data/2020-07-23_213056', 'data/2020-07-23_213333', 'data/2020-07-24_154211') # changing alpha
-    #winsound.Beep(2500, 1000) # beep to say sim is finished
     
 def simulate():
     """
@@ -126,19 +95,16 @@ def simulate():
     MeanDelay = [np.zeros(SIM_TIME) for mc in range(MONTE_CARLOS)]
     MeanVisDelay = [np.zeros(SIM_TIME) for mc in range(MONTE_CARLOS)]
     TXPool= [np.zeros((TimeSteps, NUM_NODES)) for mc in range(MONTE_CARLOS)]
-    UserTX= [np.zeros((TimeSteps, USERNUMBER)) for mc in range(MONTE_CARLOS)]
+    UserTX= [np.zeros((TimeSteps, NUM_USERS)) for mc in range(MONTE_CARLOS)]
     EstTXPoolDelay = [np.zeros((TimeSteps, NUM_NODES)) for mc in range(MONTE_CARLOS)]
     ActualTXdelay= [np.zeros((TimeSteps, NUM_NODES)) for mc in range(MONTE_CARLOS)]
     FilteredRateRecord= [np.zeros((TimeSteps, NUM_NODES)) for mc in range(MONTE_CARLOS)]
     TXdelayError= [np.zeros((TimeSteps, NUM_NODES)) for mc in range(MONTE_CARLOS)]
     ScheduledTX= np.zeros((TimeSteps, NUM_NODES))
     PerBlacklisted= np.zeros(TimeSteps)
-    UserDelay = [np.zeros((TimeSteps, USERNUMBER)) for mc in range(MONTE_CARLOS)]
-    Costfee = [np.zeros((TimeSteps, USERNUMBER)) for mc in range(MONTE_CARLOS)]
+    UserDelay = [np.zeros((TimeSteps, NUM_USERS)) for mc in range(MONTE_CARLOS)]
+    Costfee = [np.zeros((TimeSteps, NUM_USERS)) for mc in range(MONTE_CARLOS)]
 
-
-
-      
     TP = []
     WTP = []
     UserIssuedTX= []
@@ -202,7 +168,7 @@ def simulate():
                 Throughput[mc][i, NodeID] = Net.Throughput[NodeID]
                 WorkThroughput[mc][i,NodeID] = Net.WorkThroughput[NodeID]
                 Undissem[mc][i,NodeID] = Net.Nodes[NodeID].Undissem
-                TXPool[mc][i, NodeID] = len(Net.Nodes[NodeID].UserTX)
+                TXPool[mc][i, NodeID] = len(Net.Nodes[NodeID].LTP)
                 EstTXPoolDelay[mc][i, NodeID] = Net.Nodes[NodeID].Estdelay
                 ActualTXdelay[mc][i, NodeID]= Net.Nodes[NodeID].ActualTXdelay    
                 FilteredRateRecord[mc][i, NodeID]= Net.Nodes[NodeID].FilteredRateRecord       
@@ -217,7 +183,7 @@ def simulate():
 
 
 
-            for NodeID in range(USERNUMBER):
+            for NodeID in range(NUM_USERS):
                 UserTX[mc][i, NodeID] = Net.IssuedTX[NodeID]   
                 UserDelay[mc][i, NodeID]= Net.Users[NodeID].User_lastdelay
 
@@ -253,7 +219,7 @@ def simulate():
         window = 10
         TP.append(np.concatenate((np.zeros((int(window/STEP), NUM_NODES)),(Throughput[mc][int(window/STEP):,:]-Throughput[mc][:-int(window/STEP),:])))/window)
         WTP.append(np.concatenate((np.zeros((int(window/STEP), NUM_NODES)),(WorkThroughput[mc][int(window/STEP):,:]-WorkThroughput[mc][:-int(window/STEP),:])))/window)
-        UserIssuedTX.append(np.concatenate((np.zeros((int(window/STEP), USERNUMBER)),(UserTX[mc][int(window/STEP):,:]-UserTX[mc][:-int(window/STEP),:])))/window)
+        UserIssuedTX.append(np.concatenate((np.zeros((int(window/STEP), NUM_USERS)),(UserTX[mc][int(window/STEP):,:]-UserTX[mc][:-int(window/STEP),:])))/window)
         NodeschedulTX.append(np.concatenate((np.zeros((int(window/STEP), NUM_NODES)),(ScheduledTX[int(window/STEP):,:]-ScheduledTX[:-int(window/STEP),:])))/window)
         #TP.append(np.convolve(np.zeros((Throughput[mc][500:,:]-Throughput[mc][:-500,:])))/5)
         Neighbours = [[Neighb.NodeID for Neighb in Node.Neighbours] for Node in Net.Nodes]
@@ -310,9 +276,6 @@ def simulate():
                                       '\nnumber of neighbours = ' + str(NUM_NEIGHBOURS) +
                                       '\nrepdist = ' + str(REPDIST) +
                                       '\nmodes = ' + str(MODE) +
-                                      '\niot = ' + str(IOT) +
-                                      '\niotlow = ' + str(IOTLOW) +
-                                      '\niothigh = ' + str(IOTHIGH) +
                                       '\ndcmax = ' + str(MAX_WORK) +
                                       '\n\n# Congestion Control Parameters' +
                                       '\nalpha = ' + str(ALPHA) +
@@ -326,11 +289,7 @@ def simulate():
                                       '\nSchedule on solid = ' + str(SCHEDULE_ON_SOLID) +
                                       '\nsolidification requests = ' + str(SOLID_REQUESTS) +
                                       '\nblacklist = ' + str(BLACKLIST) +
-                                      '\nPROBABILITY = ' + str(PROBABILITY) +
-                                      '\nRANDOM = ' + str(RANDOM) +
-                                      '\nREPRANDOM = ' + str(REPRANDOM) +
-                                      '\nMIMUDELAY = ' + str(MIMUDELAY) +
-                                      '\nQOS = ' + str(QOS) +
+                                      '\nNODE_SELECTION = ' + str(NODE_SELECTION) +
                                       '\nsched=' + SCHEDULING], delimiter = " ", fmt='%s')
     
 
@@ -532,13 +491,8 @@ def plot_results(dirstr):
     ax1[0].set_ylabel(r'$DR_i$')
     ax1[1].set_ylabel(r'$DR_i / {\~{\lambda}_i}$')
     mal = False
-    iot = False
     for NodeID in range(NUM_NODES):
-        if IOT[NodeID]:
-            iot = True
-            marker = 'x'
-        else:
-            marker = None
+        marker = None
         if MODE[NodeID]==1:
             ax1[0].plot(np.arange(window, SIM_TIME, STEP), avgTP[int(window/STEP):,NodeID], linewidth=5*REP[NodeID]/REP[0], color='tab:blue', marker=marker, markevery=0.1)
             ax1[1].plot(np.arange(window, SIM_TIME, STEP), avgTP[int(window/STEP):,NodeID]*sum(REP)/(NU*REP[NodeID]), linewidth=5*REP[NodeID]/REP[0], color='tab:blue', marker=marker, markevery=0.1)
@@ -552,9 +506,6 @@ def plot_results(dirstr):
     if mal:
         ModeLines = [Line2D([0],[0],color='tab:blue', lw=4), Line2D([0],[0],color='tab:red', lw=4), Line2D([0],[0],color='tab:green', lw=4)]
         fig1.legend(ModeLines, ['Content','Best-effort', 'Malicious'], loc='right')
-    elif iot:
-        ModeLines = [Line2D([0],[0],color='tab:blue'), Line2D([0],[0],color='tab:red'), Line2D([0],[0],color='tab:blue', marker='x'), Line2D([0],[0],color='tab:red', marker='x')]
-        fig1.legend(ModeLines, ['Content value node','Best-effort value node', 'Content IoT node', 'Best-effort IoT node'], loc='right')
     else:
         ModeLines = [Line2D([0],[0],color='tab:blue', lw=4), Line2D([0],[0],color='tab:red', lw=4)]
         fig1.legend(ModeLines, ['Content','Best-effort'], loc='right')
@@ -579,14 +530,7 @@ def plot_results(dirstr):
     ax3.set_xlabel('Latency (sec)')
     plot_cdf(latencies, ax3)
     plt.savefig(dirstr+'/Latency.png', bbox_inches='tight')
-    
-    '''
-    fig3a, ax3a = plt.subplots(figsize=(8,4))
-    ax3a.grid(linestyle='--')
-    ax3a.set_xlabel('Inbox Latency (sec)')
-    plot_cdf(inboxLatencies, ax3a)
-    plt.savefig(dirstr+'/InboxLatency.png', bbox_inches='tight')
-    '''
+
 
     fig4, ax4 = plt.subplots(figsize=(8,4))
     ax4.grid(linestyle='--')
@@ -636,23 +580,7 @@ def plot_results(dirstr):
     ax5.set_xlim(0, SIM_TIME)
     
     plt.savefig(dirstr+'/AvgInboxLenMA.png', bbox_inches='tight')
-    """
-    fig5, ax5 = plt.subplots(figsize=(8,4))
-    ax5.grid(linestyle='--')
-    ax5.set_xlabel('Time (sec)')
-    ax5.set_ylabel('Deficits at Node 6')
-    N=100
-    for NodeID in range(NUM_NODES):
-        if MODE[NodeID]==1:
-            ax5.plot(np.arange((N-1)*STEP, SIM_TIME, STEP), np.convolve(np.ones(N)/N, avgSolReq[:,NodeID], 'valid'), color='tab:blue', linewidth=5*REP[NodeID]/REP[0])
-        if MODE[NodeID]==2:
-            ax5.plot(np.arange((N-1)*STEP, SIM_TIME, STEP), np.convolve(np.ones(N)/N, avgSolReq[:,NodeID], 'valid'), color='tab:red', linewidth=5*REP[NodeID]/REP[0])
-        if MODE[NodeID]>2:
-            ax5.plot(np.arange((N-1)*STEP, SIM_TIME, STEP), np.convolve(np.ones(N)/N, avgSolReq[:,NodeID], 'valid'), color='tab:green', linewidth=5*REP[NodeID]/REP[0])
-    ax5.set_xlim(0, SIM_TIME)
-    
-    plt.savefig(dirstr+'/AvgSolReq.png', bbox_inches='tight')
-    """
+
     fig5, ax5 = plt.subplots(figsize=(8,4))
     ax5.grid(linestyle='--')
     ax5.set_xlabel('Time (sec)')
@@ -668,39 +596,7 @@ def plot_results(dirstr):
     ax5.set_xlim(0, SIM_TIME)
     
     plt.savefig(dirstr+'/avgDefs.png', bbox_inches='tight')
-    '''
-    fig5a, ax5a = plt.subplots(figsize=(8,4))
-    ax5a.grid(linestyle='--')
-    ax5a.set_xlabel('Time (sec)')
-    ax5a.set_ylabel('Inbox Len and Arrivals')
-    NodeID = 2
-    step = 1
-    bins = np.arange(0, SIM_TIME, step)
-    i = 0
-    j = 0
-    nArr = np.zeros(len(bins))
-    inboxLen = np.zeros(len(bins))
-    for b, t in enumerate(bins):
-        if b>0:
-            inboxLen[b] = inboxLen[b-1]
-        while ArrTimes[NodeID][0][i] < t+step:
-            nArr[b] += 1
-            inboxLen[b] +=1
-            i += 1
-            if i>=len(ArrTimes[NodeID][0]):
-                break
-            
-        while ServTimes[NodeID][0][j] < t+step:
-            inboxLen[b] -= 1
-            j += 1
-            if j>=len(ServTimes[NodeID][0]):
-                break
-    ax5a.plot(bins, nArr/(step*NU), color = 'black')
-    ax5b = ax5a.twinx()
-    ax5b.plot(bins, inboxLen, color='blue')
     
-    plt.savefig(dirstr+'/InboxLenMA.png', bbox_inches='tight')
-    '''
     fig6, ax6 = plt.subplots(figsize=(8,4))
     ax6.grid(linestyle='--')
     ax6.set_xlabel('Node ID')
@@ -718,14 +614,6 @@ def plot_results(dirstr):
     ModeLines = [Line2D([0],[0],color='tab:red', lw=4), Line2D([0],[0],color='tab:blue', lw=4), Line2D([0],[0],color='gray', lw=4), Line2D([0],[0],color='tab:green', lw=4)]
     ax6.legend(ModeLines, ['Best-effort', 'Content', 'Inactive', 'Malicious'], loc='upper right')
     plt.savefig(dirstr+'/RepDist.png', bbox_inches='tight')
-    '''
-    fig7, ax7 = plt.subplots(figsize=(8,4))
-    plot_cdf(ISTimes, ax7)
-    ax7.grid(linestyle='--')
-    ax7.set_xlabel('Inter-service time (sec)')
-    plt.savefig(dirstr+'/InterServiceTimes.png', bbox_inches='tight')
-    '''
-
 
     fig9, ax9 = plt.subplots(figsize=(8,4))
     ax9.grid(linestyle='--')
@@ -753,9 +641,6 @@ def plot_results(dirstr):
     
     plt.savefig(dirstr+'/avgTXPool.png', bbox_inches='tight')
 
-
-
-
     fig5, ax5 = plt.subplots(figsize=(8,4))
     ax5.grid(linestyle='--')
     ax5.set_xlabel('Time (sec)')
@@ -773,20 +658,6 @@ def plot_results(dirstr):
     plt.savefig(dirstr+'/AvgCostfee.png', bbox_inches='tight')
 
 
-
-    # fig10, ax10 = plt.subplots(figsize=(8,4))
-    # ax10.grid(linestyle='--')
-    # ax10.set_xlabel('Time (sec)')
-    # ax10.plot(np.arange(window, SIM_TIME, STEP), np.sum(avguserTX[int(window/STEP):,:], axis=1), color = 'black')
-    # #ax10.set_ylim((0,1.1*NU))
-    # ax10.plot(np.arange(0, SIM_TIME, STEP), [50 for i in range(int(SIM_TIME/STEP))], color='tab:gray')    
-    # ax10.tick_params(axis='y', labelcolor='black')
-    # ax10.set_ylabel('user issuing rate/ Scheduling rate', color='black')
-    # fig10.tight_layout()
-    # plt.savefig(dirstr+'User_demand.png', bbox_inches='tight')
-
-
-
     fig10, ax10 = plt.subplots(figsize=(8,4))
     ax10.grid(linestyle='--')
     ax10.set_xlabel('Time (sec)')
@@ -799,7 +670,7 @@ def plot_results(dirstr):
     ModeLines = [Line2D([0],[0],color='black', lw=2), Line2D([0],[0],color='gray', lw=2, linestyle="--")]
     ax10.set_ylim(0, 70) 
     ax10.legend(ModeLines, ['Sending', 'Scheduling'], loc='lower right')
-    plt.savefig(dirstr+'User_demand1.png', bbox_inches='tight')
+    plt.savefig(dirstr+'/User_demand1.png', bbox_inches='tight')
 
 
     fig10, ax10 = plt.subplots(figsize=(8,4))
@@ -814,7 +685,7 @@ def plot_results(dirstr):
     ModeLines = [Line2D([0],[0],color='black', lw=2), Line2D([0],[0],color='gray', lw=2, linestyle="--")]
     ax10.set_ylim(0, 70) 
     ax10.legend(ModeLines, ['Sending', 'Scheduling'], loc='lower right')
-    plt.savefig(dirstr+'User_demand2.png', bbox_inches='tight')
+    plt.savefig(dirstr+'/User_demand2.png', bbox_inches='tight')
 
     fig5, ax5 = plt.subplots(figsize=(8,4))
     ax5.grid(linestyle='--')
@@ -837,8 +708,8 @@ def plot_results(dirstr):
     ax5.set_xlabel('Time (sec)')
     ax5.set_ylabel('AvgUserDelay')
     N=100
-    for NodeID in range(USERNUMBER):
-        ax5.plot(np.arange((N-1)*STEP, SIM_TIME, STEP), np.convolve(np.ones(N)/N, AvgUserDelay[:,NodeID], 'valid'))  
+    for UserID in range(NUM_USERS):
+        ax5.plot(np.arange((N-1)*STEP, SIM_TIME, STEP), np.convolve(np.ones(N)/N, AvgUserDelay[:,UserID], 'valid'))  
     #ax5.set_ylim(0, 120)                                    
     plt.savefig(dirstr+'/AvgUserDelay.png', bbox_inches='tight')   
 
@@ -921,7 +792,6 @@ def plot_cdf(data, ax, xlim=0):
     maxval = max(maxval, xlim)
     Lines = [[] for NodeID in range(NUM_NODES)]
     mal = False
-    iot = False
     for NodeID in range(NUM_NODES):
         if MODE[NodeID]>0:
             bins = np.arange(0, round(maxval*1/step), 1)*step
@@ -940,11 +810,7 @@ def plot_cdf(data, ax, xlim=0):
                     pdf[i-1] += 1
             pdf = pdf/sum(pdf) # normalise
             cdf = np.cumsum(pdf)
-            if IOT[NodeID]:
-                iot = True
-                marker = 'x'
-            else:
-                marker = None
+            marker = None
             if MODE[NodeID]==1:
                 Lines[NodeID] = ax.plot(bins, cdf, color='tab:blue', linewidth=4*REP[NodeID]/REP[0], marker=marker, markevery=0.3)
             if MODE[NodeID]==2:
@@ -955,9 +821,6 @@ def plot_cdf(data, ax, xlim=0):
     if mal:
         ModeLines = [Line2D([0],[0],color='tab:red', lw=4), Line2D([0],[0],color='tab:blue', lw=4), Line2D([0],[0],color='tab:green', lw=4)]
         ax.legend(ModeLines, ['Best-effort', 'Content','Malicious'], loc='lower right')
-    elif iot:
-        ModeLines = [Line2D([0],[0],color='tab:blue'), Line2D([0],[0],color='tab:red'), Line2D([0],[0],color='tab:blue', marker='x'), Line2D([0],[0],color='tab:red', marker='x')]
-        ax.legend(ModeLines, ['Content value node','Best-effort value node', 'Content IoT node', 'Best-effort IoT node'], loc='lower right')
     else:
         ModeLines = [Line2D([0],[0],color='tab:blue', lw=4), Line2D([0],[0],color='tab:red', lw=4)]
         ax.legend(ModeLines, ['Content','Best-effort'], loc='lower right')
@@ -1031,13 +894,10 @@ class UserTransaction:
     """
     Object to simulate a transaction generated by a user
     """
-    def __init__(self, User, UserTXtime, estimateddelay= None, TXPool= None, Issuingrate= None, time= None):
+    def __init__(self, User, Time, estimateddelay= None):
         self.User= User
-        self.UserTXtime = UserTXtime
+        self.Time = Time
         self.estimateddelay= estimateddelay
-        self.TXPool= TXPool
-        self.Issuingrate= Issuingrate
-        self.time= time
 
     
 
@@ -1057,7 +917,6 @@ class UserChoice:
         self.Allnodes= []
         self.ZeroDelaynodes= []
         self.SecondNode= []
-        self.UserTXcounter= [0 for NodeID in range(NUM_NODES)]
         self.FilRate= 0
         self.User_lastdelay = 0
         
@@ -1071,185 +930,43 @@ class UserChoice:
         self.SumnodeDelay= 0
         self.Allfreenodes= []
         self.Alldelay= []
-        Allnodes= []
-        self.Probability= []
         self.SecondNode= []
-        Oknodes= []
         self.selectnode= []
         self.Noderecord= []
         self.Estdelay=[[] for NodeID in range(NUM_NODES)]
-        self.Aam = 0.2
-        self.Bbm = 0.8 
+        self.Aam = 0.8
+        self.Bbm = (1- self.Aam)
 
-        Miu= self.Network.UserDemand(Time)
+        Miu= 0.6
         times = np.sort(np.random.uniform(Time, Time+STEP, np.random.poisson(STEP*Miu)))  
-  
-
-        for t in times:  
-            for NodeID in range(NUM_NODES): 
-                TXSize= len(self.Network.Nodes[NodeID].UserTX)+1 
-                if MODE[NodeID]==1 or MODE[NodeID]>2:                                          
-                    FilRate= self.Network.Nodes[NodeID].Lambda  
-                if MODE[NodeID]==2:
-                    if len(self.Network.Nodes[NodeID].LambdaRecord)>20:                 
-                        FilRate = self.Network.Nodes[NodeID].Maxmin_average(Time)     
-                        #FilRate = self.Network.Nodes[NodeID].Average()
-                    else:
-                        FilRate= self.Network.Nodes[NodeID].Lambda        
-                self.Estdelay[NodeID]= TXSize/FilRate             
-
-        if len(times)!=0:         
-            if PROBABILITY:
-
-                for t in times:   
-                    Allnodes=[i for i in range(NUM_NODES)]
-
-                    for NodeID in range(NUM_NODES):  
-                        self.SumnodeDelay+= REP[NodeID]/self.Estdelay[NodeID]
-
-                    
-                    for NodeID in Allnodes:                     
-                        self.Probability.append((REP[NodeID]/self.Estdelay[NodeID])/self.SumnodeDelay)
-                                
-                    
-                    if Allnodes!=[]:
-                        Node_result = self.number_of_certain_probability(Allnodes, self.Probability)  
-                        self.UserTXcounter[Node_result]+=1 
-                    else:
-                        Node_result =None
-
-            if QOS:
-
-                self.Aam = 0.8
-                self.Bbm = (1- self.Aam)
-
-
-
-                for t in times:   
-                    Allnodes=[]
-                    self.Cm = []
-                    self.Probability= []
-                        
-                    Allnodes=[i for i in range(NUM_NODES)] 
-
-                    for NodeID in Allnodes: 
-                        a= self.Aam* self.Estdelay[NodeID] + self.Bbm*self.Network.Nodes[NodeID].Fee
-                        if a>np.random.uniform(8,10):
-                            a= False 
-                        self.Cm.append(a)
-                        if isinstance(a, bool):
-                            pass
-                        else:
-                            self.SumnodeDelay+= REP[NodeID]/self.Cm[-1]
-                
-                    if self.SumnodeDelay!=0:
-                        for NodeID in Allnodes:  
-                            
-                            if isinstance(self.Cm[NodeID], bool):
-                                b = 0
-                            else:
-                                b = REP[NodeID]/self.Cm[NodeID]
-                            
-                            self.Probability.append(b/self.SumnodeDelay)
-                    else:
-                        self.Probability= []
-
-                    if self.Probability!=[]:           
-                        l= [i for i in self.Probability if i!=0]
-                    else:
-                        l=[]
-
-                    if Allnodes!=[] and len(l)!=0:
-                        Node_result = self.number_of_certain_probability(Allnodes, self.Probability)  
-                        self.UserTXcounter[Node_result]+=1 
-                    else:
-                        Node_result =None                    
-
-
-            if MIMUDELAY:
-
-                for t in times: 
-                    Alldelays= []     
-                    for NodeID in range(NUM_NODES):     
-                        Estdelay= TXSize/FilRate  
-                        Alldelays.append(Estdelay)
-
         
-                    Node_result =  Alldelays.index(min(Alldelays)) 
-                    # Node_result = np.random.choice(Oknodes)  
-                    self.UserTXcounter[Node_result]+=1  
+        for t in times:
+            # Compute the estimated delay and filtered rate for each node
+            for NodeID in range(NUM_NODES): 
+                LTPSize= len(self.Network.Nodes[NodeID].LTP)+1
+                FilRate = self.Network.Nodes[NodeID].get_filtered_rate(Time)      
+                self.Estdelay[NodeID]= LTPSize/FilRate             
 
+            if NODE_SELECTION=='URNS': 
+                Node_result = np.random.choice([NodeID for NodeID in range(NUM_NODES)])
+        
+            elif NODE_SELECTION=='RBNS':  
+                probs = [REP[NodeID]/sum(REP) for NodeID in range(NUM_NODES)]
+                Node_result = np.random.choice([NodeID for NodeID in range(NUM_NODES)], p=probs)
 
-            
-            if REPRANDOM:      
-                Probability= []   
-                Oknodes= [i for i in range(NUM_NODES)] 
+            elif NODE_SELECTION=='DBNS':
+                repdelays = [REP[NodeID]/self.Estdelay[NodeID] for NodeID in range(NUM_NODES)]
+                probs = [repdelays[NodeID]/sum(repdelays) for NodeID in range(NUM_NODES)]
+                Node_result = np.random.choice([NodeID for NodeID in range(NUM_NODES)], p=probs)
 
-                for NodeID in range(NUM_NODES):
-                    Probability.append(REP[NodeID]/sum(REP))
-                    
-                for t in times:  
-                    # if Oknodes!=[]:        
-                    Node_result = self.number_of_certain_probability(Oknodes, Probability)  
-                    # Node_result = np.random.choice(Oknodes)  
-                    self.UserTXcounter[Node_result]+=1  
-         
-
-            if RANDOM:      
-                Probability= []   
-                Oknodes= [] 
-                for NodeID in range(NUM_NODES):
-                    if LimitedSize:
-                        self.Network.Nodes[NodeID].FreeSize = NODETX_SIZE[NodeID]-len(self.Network.Nodes[NodeID].UserTX)
-                        if self.Network.Nodes[NodeID].FreeSize>0:
-                            Oknodes.append(NodeID)
-                    else:
-                        Oknodes.append(NodeID)
-                # Miu= self.Network.UserDemand(Time)
-                # times = np.sort(np.random.uniform(Time, Time+STEP, np.random.poisson(STEP*Miu)))
-                    
-                for t in times:  
-                    if Oknodes!=[]:        
-                        Node_result = np.random.choice(Oknodes)
-                    # Node_result = np.random.choice(Oknodes)  
-                        self.UserTXcounter[Node_result]+=1  
-
-            if Node_result!=None:      
-                if FILTER:
-                    if MODE[Node_result]==1:
-                        self.FilRate= self.Network.Nodes[Node_result].Lambda
-                    elif MODE[Node_result]==2: 
-                        if AVERAGE:
-                            self.FilRate = self.Network.Nodes[Node_result].Average()  
-                        else:
-                            if len(self.Network.Nodes[Node_result].LambdaRecord)>21:                      
-                                self.FilRate = self.Network.Nodes[Node_result].Maxmin_average(Time)  
-                            else:
-                                self.FilRate= self.Network.Nodes[Node_result].Lambda  
-                else:
-                    self.FilRate= self.Network.Nodes[Node_result].Lambda   
-
-
-                TXSize= len(self.Network.Nodes[Node_result].UserTX)+1                                                
-                self.Network.Nodes[Node_result].FilteredRateRecord= self.FilRate                   
-                Estdelay= TXSize/self.FilRate                                                                  
-                self.Network.Nodes[Node_result].UserTX.append(UserTransaction(self, t, estimateddelay= Estdelay, TXPool= TXSize, Issuingrate= self.FilRate, time= Time ))   
-                # self.Network.Nodes[self.Node_result].delaydir['UserTransaction(t, Time)']= (len(self.Network.Nodes[self.Node_result].UserTX)+1)/self.Network.Nodes[self.Node_result].Lambda
-                self.Network.Nodes[Node_result].TranPool+=1
-                self.Network.IssuedTX[self.UserID]+= 1  
-
-    def number_of_certain_probability(self, sequence, probability):
-        """
-        Users choose a node to process a transaction
-        """    
-        x = np.random.uniform(0, 1)
-        cumulative_probability = 0.0
-        for item, item_probability in zip(sequence, probability):
-            cumulative_probability += item_probability
-            if x < cumulative_probability:
-                break
-        return item
-
+            elif NODE_SELECTION=='DBNS+':
+                qos = [REP[NodeID]/(self.Aam*self.Estdelay[NodeID] + self.Bbm*self.Network.Nodes[NodeID].Fee) for NodeID in range(NUM_NODES)]
+                probs = [qos[NodeID]/sum(qos) for NodeID in range(NUM_NODES)]
+                Node_result = np.random.choice([NodeID for NodeID in range(NUM_NODES)], p=probs)      
+     
+            self.Network.Nodes[Node_result].FilteredRateRecord= FilRate                                                                                    
+            self.Network.Nodes[Node_result].LTP.append(UserTransaction(self, t, estimateddelay= self.Estdelay[Node_result]))
+            self.Network.IssuedTX[self.UserID]+= 1  
         
 class Node:
     """
@@ -1266,6 +983,7 @@ class Node:
         self.Lambda = NU*REP[NodeID]/sum(REP)
         self.BackOff = []
         self.LastBackOff = []
+        self.LastBackOffRate = None
         self.LastScheduleTime = 0
         self.LastScheduleWork = 0
         self.LastIssueTime = 0
@@ -1282,8 +1000,7 @@ class Node:
         self.Blacklist = []
         self.FreeSize= NODETX_SIZE[self.NodeID]
         self.UserChoice= UserChoice
-        self.UserTX= []
-        self.TranPool= 0
+        self.LTP= []
         self.Received= 0
         self.ActualTXdelay= 0
         self.Estdelay= 0
@@ -1299,98 +1016,18 @@ class Node:
         self.Fee = 0
         self.Kp = 0.8
         self.Desiredelay = 15
-    
-    def Average(self):
-        # fs = 1 # sample rate, Hz
-        # cutoff = 0.0015 # desired cutoff frequency of the filter, Hz # Get the filter coefficients so we can check its frequency response.
-        # order = 6
-        Limitsize_window= 1000
 
-        y= self.LambdaRecord
-        
-        lengthRate= len(y)
-        if lengthRate > Limitsize_window:
-            self.FilterRate= sum(y[lengthRate-Limitsize_window:])/Limitsize_window
-        else:
-            self.FilterRate= self.Lambda
-
-
-        return self.FilterRate
-
-    def Maxmin_average(self, Time):
-        fs = 1 # sample rate, Hz
-        cutoff = 0.0015 # desired cutoff frequency of the filter, Hz # Get the filter coefficients so we can check its frequency response.
-        order = 6
-        x0= []
-        Gradient= []
-        X_max= []
-        y_max= []
-        X_min= []
-        y_min= []
-        x_last= []
-        y_last= []
-        y_movage= []
-        num_peak= []
-        num_inverpeak= []
-        Limitsize_window= 30
-        Unlimitsize_window= 1000
-        y0= []
-        xxx= []
-        window= 3000
-     
-        y = self.LambdaRecord        
-
-
-
-        num_peak = signal.find_peaks(y, distance=10)
-        inverratecord= [-l for l in y]
-        num_inverpeak = signal.find_peaks(inverratecord, distance=10)
-
-        if len(num_peak[0])!=0:
-            for i in num_peak[0]:
-                X_max.append(i)
-                y_max.append(y[i]) 
-        
-        if len(num_inverpeak[0])!=0:  
-            for i in num_inverpeak[0]:
-                X_min.append(i)
-                y_min.append(y[i])
-        
-       
-
-        if X_max==[] or len(X_max)==1:
-            # Gradient= np.gradient(y)
-            # x0= np.where(Gradient == 0)[0]
-
-            if len(y)>=2:
-                for i in range(len(y)):
-                    if y[i]>y[i-1] and y[i-1]==y[0]:
-                        y_min.insert(0,y[i-1])
-                        X_min.insert(0,i-1) 
-                        self.xmin= i-1
-        else:
-            y_min.insert(0,y[self.xmin])
-            X_min.insert(0,self.xmin) 
-
-
-            
-        if y_max!=[]:
-            rate= y_max[-1]*3/2*BETA
-
-
-            self.FilterRateRecord.append(rate)
+    def get_filtered_rate(self, Time):
+        window=3000
+        if self.LastBackOffRate is not None:
+            self.FilterRateRecord.append(self.LastBackOffRate)
             if len(self.FilterRateRecord)>window:
                 self.FilterRate= sum(self.FilterRateRecord[len(self.FilterRateRecord)-window:-1])/window
             else:
                 self.FilterRate= sum(self.FilterRateRecord)/len(self.FilterRateRecord)
         else:
             self.FilterRate= self.Lambda
-        
-
-
         return self.FilterRate
-            
-      
         
     def issue_txs(self, Time):
         """
@@ -1406,33 +1043,25 @@ class Node:
                 if self.BackOff:
                     self.LastIssueTime += TAU#BETA*REP[self.NodeID]/self.Lambda
                
-                while Time+STEP >= self.LastIssueTime + self.LastIssueWork/self.Lambda and len(self.UserTX)!=0:
+                while Time+STEP >= self.LastIssueTime + self.LastIssueWork/self.Lambda and len(self.LTP)!=0:
 
 
-                    UserTX= self.UserTX.pop(0)                   
+                    UserTX= self.LTP.pop(0)                   
                     self.LastIssueTime += self.LastIssueWork/self.Lambda
 
-                    if self.LastIssueTime <= UserTX.UserTXtime:
-                        self.LastIssueTime = UserTX.UserTXtime 
-
-                    
+                    if self.LastIssueTime <= UserTX.Time:
+                        self.LastIssueTime = UserTX.Time
 
                     Parents = self.select_tips()
-                    #Work = np.random.uniform(AVG_WORK[self.NodeID]-0.5, AVG_WORK[self.NodeID]+0.5)
-                    if IOT[self.NodeID]:
-                        Work = np.random.uniform(IOTLOW,IOTHIGH)
-                    else:
-                        Work = 1
+                    Work = 1
                     self.LastIssueWork = Work
                     self.TranCounter += 1
-
-  #                  self.FreeSize = NODETX_SIZE[self.NodeID]-len(self.Network.Nodes[self.NodeID].UserTX)
                     
                     self.IssuedTrans.append(Transaction(self.LastIssueTime, Parents, self, Work, Index=self.TranCounter))
                     self.Received+=1
-                    self.ActualTXdelay= self.LastIssueTime-UserTX.UserTXtime    
-                    UserTX.User.User_lastdelay = self.LastIssueTime-UserTX.UserTXtime             
-                    self.Estdelay= UserTX.estimateddelay  #TXPool= TXSize, Issuingrate= self.FilRate,
+                    self.ActualTXdelay= self.LastIssueTime-UserTX.Time   
+                    UserTX.User.User_lastdelay = self.LastIssueTime-UserTX.Time          
+                    self.Estdelay= UserTX.estimateddelay 
                     self.TXdelayError= self.ActualTXdelay-self.Estdelay
 
                     
@@ -1440,9 +1069,6 @@ class Node:
                     #     self.Fee = 0
                     # else:
                     self.Fee = self.Kp* max(0,(self.ActualTXdelay-self.Desiredelay))
-
-
-                                                     
              
             else:
                 self.LambdaRecord.append(self.Lambda)
@@ -1454,13 +1080,13 @@ class Node:
                     self.TranCounter += 1
                     self.IssuedTrans.append(Transaction(t, Parents, self, Work, Index=self.TranCounter))
 
-                    if len(self.UserTX)!=0:   
-                        UserTX= self.UserTX.pop(0) 
-                        if t<= UserTX.UserTXtime:
-                            t= UserTX.UserTXtime
+                    if len(self.LTP)!=0:   
+                        UserTX= self.LTP.pop(0) 
+                        if t<= UserTX.Time:
+                            t= UserTX.Time
                         self.IssuedTrans.append(Transaction(t, Parents, self, Work, Index=self.TranCounter))  
                         self.Received+=1
-                        self.ActualTXdelay= t-UserTX.UserTXtime                  
+                        self.ActualTXdelay= t-UserTX.Time               
                         self.Estdelay= UserTX.estimateddelay                           
                         self.TXdelayError= self.ActualTXdelay-self.Estdelay
 
@@ -1600,6 +1226,7 @@ class Node:
                         return
                 # multiplicative decrease or else additive increase
                 if self.BackOff:
+                    self.LastBackOffRate = self.Lambda*(BETA + (1-BETA)/2) # between max and min
                     self.Lambda = self.Lambda*BETA
                     self.BackOff = False
                     self.LastBackOff = Time
@@ -1903,14 +1530,14 @@ class Network:
         self.VisTranDelays = []
         self.DissemTimes = []
         Genesis = Transaction(0, [], [])
-        self.IssuedTX= [0 for NodeID in range(USERNUMBER)]
+        self.IssuedTX= [0 for NodeID in range(NUM_USERS)]
         self.Miu= 0
 
         # Create nodes
         for i in range(np.size(self.A,1)):
             self.Nodes.append(Node(self, i, Genesis))
         # Create users
-        for i in range(USERNUMBER):
+        for i in range(NUM_USERS):
             self.Users.append(UserChoice(self, i))        
         # Add neighbours and create list of comm channels corresponding to each node
         for i in range(np.size(self.A,1)):
@@ -1954,17 +1581,6 @@ class Network:
                 if LastTxNode==TxNode.Neighbours[i]:
                     continue
             CC.send_packet(TxNode, TxNode.Neighbours[i], Data, Time)
-
-    def UserDemand(self, Time):
-        #self.Miu= -0.000000234375*(Time-90)*(Time-90)+0.006 #small issuing rate
-        #self.Miu= -0.0000003125*(Time-90)*(Time-90)+0.008 #High issuing rate
-        #self.Miu= -0.000001*(Time+5)*(Time-185) #High issuing rate
-        #self.Miu= -0.000000177514792899*(Time-130)*(Time-130)+0.008
-        #self.Miu= 0.45
-        self.Miu= 0.6
-        #self.Miu= 0.60
-
-        return self.Miu
 
     def simulate(self, Time):
         """
